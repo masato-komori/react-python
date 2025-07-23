@@ -1,12 +1,12 @@
 version: "3.8"
 
 services:
-  # FastAPI Backend
+  # Flask Backend
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: fastapi-backend
+    container_name: flask-backend
     ports:
       - "8000:8000"
     volumes:
@@ -18,7 +18,6 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
     depends_on:
       - dynamodb-local
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   # React Frontend
   frontend:

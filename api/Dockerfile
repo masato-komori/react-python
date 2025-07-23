@@ -1,15 +1,24 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 # システムの依存関係をインストール
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Pythonの依存関係をコピーしてインストール
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Poetryをインストール（バージョン2系を指定）
+RUN pip install poetry==2.*
+
+# Poetry設定: 仮想環境を作成しない（コンテナ内では不要）
+RUN poetry config virtualenvs.create false
+
+# pyproject.tomlとpoetry.lockをコピー
+COPY pyproject.toml poetry.lock* ./
+
+# 依存関係をインストール（開発依存関係は除く）
+RUN poetry install --without dev --no-root
 
 # アプリケーションコードをコピー
 COPY . .
@@ -18,4 +27,4 @@ COPY . .
 EXPOSE 8000
 
 # アプリケーションを起動
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["python", "main.py"]

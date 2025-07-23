@@ -1,79 +1,92 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
-from database_dynamodb import init_dynamodb, get_all_users, create_user as db_create_user
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from database_dynamodb import init_dynamodb, get_all_users, create_user as db_create_user, get_user_by_id
+import os
 
-app = FastAPI()
-
-# アプリケーション起動時にデータベースを初期化
-@app.on_event("startup")
-async def startup_event():
-    init_dynamodb()
+app = Flask(__name__)
 
 # CORS設定（Reactアプリケーションとの通信用）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # React Vite開発サーバー
-        "http://127.0.0.1:5173",  # React Vite開発サーバー（IP版）
-        "http://localhost:8000",  # FastAPI
-        "http://127.0.0.1:8000"   # FastAPI（IP版）
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+CORS(app, origins=[
+    "http://localhost:5173",  # React Vite開発サーバー
+    "http://127.0.0.1:5173",  # React Vite開発サーバー（IP版）
+    "http://localhost:8000",  # Flask
+    "http://127.0.0.1:8000"   # Flask（IP版）
+])
 
-# データモデル定義
-class User(BaseModel):
-    name: str
-    email: str
-    age: Optional[int] = None
+# アプリケーション起動時にデータベースを初期化
+@app.before_request
+def before_first_request():
+    if not hasattr(app, 'db_initialized'):
+        init_dynamodb()
+        app.db_initialized = True
 
-class UserResponse(BaseModel):
-    id: str  # DynamoDBではIDは文字列型
-    name: str
-    email: str
-    age: Optional[int] = None
-
-
-@app.get("/")
+@app.route('/')
 def read_root():
-    return {"Hello": "World", "message": "FastAPI is running!"}
+    return jsonify({"Hello": "World", "message": "Flask is running!"})
 
-
-@app.get("/api/health")
+@app.route('/api/health')
 def health_check():
-    return {"status": "healthy", "timestamp": "2025-07-22"}
+    return jsonify({"status": "healthy", "timestamp": "2025-07-23"})
 
-
-@app.get("/api/users")
+@app.route('/api/users', methods=['GET'])
 def get_users():
-    users = get_all_users()
-    return {"users": users}
+    try:
+        users = get_all_users()
+        return jsonify({"users": users})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/users/<user_id>', methods=['GET'])
+def get_user(user_id):
+    try:
+        user = get_user_by_id(user_id)
+        if user:
+            return jsonify(user)
+        else:
+            return jsonify({"error": "User not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str = None):
-    return {"item_id": item_id, "q": q}
+@app.route('/api/users', methods=['POST'])
+def create_user():
+    try:
+        data = request.get_json()
+        
+        # バリデーション
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        if 'name' not in data or 'email' not in data:
+            return jsonify({"error": "Name and email are required"}), 400
+        
+        # ユーザー作成
+        new_user = db_create_user(
+            name=data['name'],
+            email=data['email'],
+            age=data.get('age')
+        )
+        
+        return jsonify(new_user), 201
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/items/<int:item_id>')
+def read_item(item_id):
+    q = request.args.get('q')
+    return jsonify({"item_id": item_id, "q": q})
 
-@app.post("/api/users", response_model=UserResponse)
-def create_user(user: User):
-    # データベースに新しいユーザーを保存
-    new_user_data = db_create_user(user.name, user.email, user.age)
-    return UserResponse(**new_user_data)
-
-
-@app.get("/api/message")
+@app.route('/api/message')
 def get_message():
-    return {
+    return jsonify({
         "message": "ReactからのAPIリクエストが成功しました！",
-        "timestamp": "2025-07-22",
+        "timestamp": "2025-07-23",
         "data": {
-            "server": "FastAPI",
-            "version": "0.116.1",
+            "server": "Flask",
+            "version": "3.0.0",
             "cors_enabled": True
         }
-    }
+    })
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000, debug=True)
