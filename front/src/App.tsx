@@ -12,7 +12,7 @@ import {
 } from "./components/ui/table";
 
 interface User {
-  id: number;
+  id: string;  // DynamoDBに合わせて文字列型に変更
   name: string;
   email: string;
 }
@@ -27,7 +27,8 @@ function App() {
   // 2. ユーザー一覧を取得
   const fetchUsers = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/users");
+      const apiUrl = import.meta.env.VITE_API_URL
+      const response = await fetch(`${apiUrl}/api/users`);
       const result = await response.json();
       const data: User[] = result.users; // APIレスポンスの構造に合わせて修正
       console.log(data);

@@ -2,17 +2,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from database_dynamodb import init_dynamodb, get_all_users, create_user as db_create_user
 
 app = FastAPI()
+
+# アプリケーション起動時にデータベースを初期化
+@app.on_event("startup")
+async def startup_event():
+    init_dynamodb()
 
 # CORS設定（Reactアプリケーションとの通信用）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",  # Vite開発サーバー
-        "http://127.0.0.1:5173"   # Vite開発サーバー
+        "http://localhost:5173",  # React Vite開発サーバー
+        "http://127.0.0.1:5173",  # React Vite開発サーバー（IP版）
+        "http://localhost:8000",  # FastAPI
+        "http://127.0.0.1:8000"   # FastAPI（IP版）
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -26,7 +32,7 @@ class User(BaseModel):
     age: Optional[int] = None
 
 class UserResponse(BaseModel):
-    id: int
+    id: str  # DynamoDBではIDは文字列型
     name: str
     email: str
     age: Optional[int] = None
@@ -44,13 +50,8 @@ def health_check():
 
 @app.get("/api/users")
 def get_users():
-    return {
-        "users": [
-            {"id": 1, "name": "田中太郎", "email": "tanaka@example.com"},
-            {"id": 2, "name": "佐藤花子", "email": "sato@example.com"},
-            {"id": 3, "name": "山田次郎", "email": "yamada@example.com"}
-        ]
-    }
+    users = get_all_users()
+    return {"users": users}
 
 
 @app.get("/items/{item_id}")
@@ -60,14 +61,9 @@ def read_item(item_id: int, q: str = None):
 
 @app.post("/api/users", response_model=UserResponse)
 def create_user(user: User):
-    # 実際のアプリケーションではデータベースに保存します
-    new_user = UserResponse(
-        id=999,  # 仮のID
-        name=user.name,
-        email=user.email,
-        age=user.age
-    )
-    return new_user
+    # データベースに新しいユーザーを保存
+    new_user_data = db_create_user(user.name, user.email, user.age)
+    return UserResponse(**new_user_data)
 
 
 @app.get("/api/message")
